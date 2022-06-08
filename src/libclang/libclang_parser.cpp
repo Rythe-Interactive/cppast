@@ -291,7 +291,7 @@ void add_default_include_dirs(libclang_compile_config& config)
             if (c == ' ')
             { // escape spaces
 #if CPPAST_DETAIL_WINDOWS
-                path += "^ ";
+                path += " ";
 #else
                 path += "\\ ";
 #endif
@@ -306,7 +306,7 @@ void add_default_include_dirs(libclang_compile_config& config)
                 path += c;
         }
 
-        config.add_include_dir(std::move(path));
+        config.add_include_dir('\"' + path + '\"');
     }
 }
 } // namespace

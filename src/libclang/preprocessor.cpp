@@ -177,7 +177,7 @@ std::string get_macro_command(const libclang_compile_config& c, const char* full
     // other flags
     for (auto& flag : detail::libclang_compile_config_access::flags(c))
     {
-        cmd += quote(flag);
+        cmd += flag;
         cmd += ' ';
     }
 
@@ -228,7 +228,7 @@ std::string get_preprocess_command(const libclang_compile_config& c, const char*
         if (!macro_file_path || flag[1] != 'I')
         {
             // only add this flag if it is not an include or we're not doing fast preprocessing
-            cmd += quote(flag);
+            cmd += flag;
             cmd += ' ';
         }
     }
@@ -371,7 +371,8 @@ std::string write_macro_file(const libclang_compile_config& c, const std::string
     auto          file = get_macro_file_name();
     std::ofstream stream(file);
 
-    auto         cmd = get_macro_command(c, full_path.c_str());
+    auto cmd = get_macro_command(c, full_path.c_str());
+
     tpl::Process process(
         cmd, "", [&](const char* str, std::size_t n) { stream.write(str, std::streamsize(n)); },
         diagnostic_logger);
@@ -1077,6 +1078,26 @@ detail::preprocessor_output detail::preprocess(const libclang_compile_config& co
         else
             xpath += *cpath;
 
+    auto reduceSlashes = [](const char* inputPath, auto&& recurse) -> std::string
+    {
+        bool        foundDoubles = false;
+        std::string result;
+        for (const char* cpath = inputPath; *cpath; cpath++)
+            if (cpath[0] == '\\' && cpath[1] == '\\')
+            {
+                result += '\\';
+                cpath++;
+                foundDoubles = true;
+            }
+            else
+                result += *cpath;
+
+        if (foundDoubles)
+            return recurse(result.c_str(), recurse);
+
+        return result;
+    };
+
     position p(ts::ref(result.source), preprocessed.file.c_str());
     ts::flag in_string(false), in_char(false), first_line(true);
     while (p)
@@ -1184,7 +1205,7 @@ detail::preprocessor_output detail::preprocess(const libclang_compile_config& co
             }
             else if (lm.value().flag == linemarker::enter_old)
             {
-                if (lm.value().file == path)
+                if (reduceSlashes(lm.value().file.c_str(), reduceSlashes) == path)
                 {
                     p.enable_write();
                     p.set_line(lm.value().line);
@@ -1192,7 +1213,8 @@ detail::preprocessor_output detail::preprocess(const libclang_compile_config& co
             }
             else if (lm.value().flag == linemarker::line_directive && p.write_enabled())
             {
-                if (first_line.try_reset() && lm.value().file == path && lm.value().line == 1u)
+                if (first_line.try_reset() && reduceSlashes(lm.value().file.c_str(), reduceSlashes) == path
+                    && lm.value().line == 1u)
                 {
                     // this is the first line marker
                     // just skip all builtin macro stuff until we reach the file again
